@@ -1916,14 +1916,6 @@ export default function App() {
     setScreen("home");
   };
 
-  const logoutUser=()=>{
-    localStorage.removeItem("sq_activeUser");
-    setUsername(null);
-    setScreen("home");
-    setPoints(0);
-    setHistory([]);
-  };
-
   // Start game session
   const startGame=(id)=>{
     setGame(id); setGameTimerDone(false); setGameTimerSecs(180);
