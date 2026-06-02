@@ -498,15 +498,17 @@ const DURATIONS = [
 ];
 
 // ── API CALL ──────────────────────────────────────────────────────────────────
+// ── API URL – change this to your Render URL ──────────────────────────────────
+const API_URL = "https://study-quest.onrender.com";
+
 async function callClaude(messages, system, maxTokens=1000) {
-  const payload = JSON.stringify({system, messages, maxTokens});
-  const res = await fetch("/api/gemini",{
-    method:"POST",
-    headers:{"Content-Type":"text/plain"},
-    body:payload
+  const res = await fetch(API_URL + "/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ system, messages, maxTokens })
   });
   const data = await res.json();
-  return data.text||data.content?.map(c=>c.text||"").join("")||"";
+  return data.text || "";
 }
 
 // ── PARKOUR: GAME COMMENT PLACEHOLDER ────────────────────────────────────────
@@ -986,9 +988,9 @@ Format: [{"q":"question text","options":["option1","option2","option3","option4"
 "answer" must be the integer index (0, 1, 2, or 3) of the correct option.
 Language: ${ln}.`;
 
-      const res=await fetch("/api/gemini",{
+      const res=await fetch("https://study-quest.onrender.com/api/gemini",{
         method:"POST",
-        headers:{"Content-Type":"text/plain"},
+        headers:{"Content-Type":"application/json"},
         body:JSON.stringify({system:"You are a quiz generator. You ONLY output raw valid JSON arrays. Never add markdown, never add explanations.",messages:[{role:"user",content:prompt}],maxTokens:4000})
       });
       if(!res.ok) throw new Error(`API error ${res.status}`);
@@ -1334,7 +1336,7 @@ CRITICAL: Return ONLY a raw JSON array, no markdown, no code fences:
 [{"q":"question","options":["A","B","C","D"],"answer":0}]
 "answer" is the integer index (0-3) of the correct option.`;
 
-        const res=await fetch("/api/gemini",{
+        const res=await fetch("https://study-quest.onrender.com/api/gemini",{
           method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown, no explanation.",messages:[{role:"user",content:prompt}]
           ,maxTokens:2000})
@@ -1563,8 +1565,8 @@ function FinalQuiz({topic,subject,lang,onDone,extended=false}) {
 CRITICAL: Return ONLY a raw JSON array, no markdown, no code fences:
 [{"q":"question","options":["A","B","C","D"],"answer":0}]
 "answer" is the integer index (0-3) of the correct option.`;
-      const res=await fetch("/api/gemini",{
-        method:"POST",headers:{"Content-Type":"text/plain"},
+      const res=await fetch("https://study-quest.onrender.com/api/gemini",{
+        method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown, no explanation.",messages:[{role:"user",content:prompt}],maxTokens:extended?6000:4000})
       });
       const data=await res.json();
@@ -1683,7 +1685,7 @@ function PeriodicQuiz({subject,topic,lang,onFinish}){
   const ln={de:"German",en:"English",it:"Italian",fr:"French"}[lang];
   useEffect(()=>{(async()=>{
     try{
-      const res=await fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown.",messages:[{role:"user",content:`Generate exactly 10 multiple-choice quiz questions about "${topic}" (subject: ${subject}) for students aged 13-15. Language: ${ln}. Return ONLY raw JSON: [{"q":"question","options":["A","B","C","D"],"answer":0}]`}],maxTokens:2500})});
+      const res=await fetch("https://study-quest.onrender.com/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown.",messages:[{role:"user",content:`Generate exactly 10 multiple-choice quiz questions about "${topic}" (subject: ${subject}) for students aged 13-15. Language: ${ln}. Return ONLY raw JSON: [{"q":"question","options":["A","B","C","D"],"answer":0}]`}],maxTokens:2500})});
       const data=await res.json();
       const raw=data.text||data.content?.map(c=>c.text||"").join("")||"";
       let parsed=null;
@@ -1737,7 +1739,12 @@ export default function App() {
   const [splash,setSplash]=useState(true);
   const [lang,setLang]=useState(()=>localStorage.getItem("sq_lang")||"de");
   const [username,setUsername]=useState(()=>localStorage.getItem("sq_activeUser")||null);
+  const [authToken,setAuthToken]=useState(()=>localStorage.getItem("sq_token")||null);
   const [usernameInput,setUsernameInput]=useState("");
+  const [passwordInput,setPasswordInput]=useState("");
+  const [authMode,setAuthMode]=useState("login"); // "login" | "register"
+  const [authError,setAuthError]=useState(null);
+  const [authLoading,setAuthLoading]=useState(false);
   const [allUsers,setAllUsers]=useState(()=>JSON.parse(localStorage.getItem("sq_users")||"{}"));
   const [screen,setScreen]=useState("home");
   const [subjects,setSubjects]=useState(()=>{const s=localStorage.getItem("sq_subjects");return s?JSON.parse(s):DEFAULT_SUBJECTS;});
@@ -1792,6 +1799,59 @@ export default function App() {
 
   const setLangS=l=>{setLang(l);localStorage.setItem("sq_lang",l);};
 
+  const handleAuth=async()=>{
+    if(!usernameInput.trim()||!passwordInput.trim()) return;
+    setAuthLoading(true);setAuthError(null);
+    try{
+      const endpoint=authMode==="login"?"/api/login":"/api/register";
+      const res=await fetch(API_URL+endpoint,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username:usernameInput.trim(),password:passwordInput})
+      });
+      const data=await res.json();
+      if(!res.ok||data.error){setAuthError(data.error||"Error");setAuthLoading(false);return;}
+      // Success
+      const u=data.username;
+      const tk=data.token;
+      localStorage.setItem("sq_activeUser",u);
+      localStorage.setItem("sq_token",tk);
+      setUsername(u);setAuthToken(tk);
+      setPoints(data.points||0);
+      setHistory(data.history||[]);
+      setPasswordInput("");setUsernameInput("");
+    }catch(e){setAuthError("Connection error — is the server running?");}
+    setAuthLoading(false);
+  };
+
+  const logoutUser=()=>{
+    localStorage.removeItem("sq_activeUser");
+    localStorage.removeItem("sq_token");
+    setUsername(null);setAuthToken(null);
+    setScreen("home");setPoints(0);setHistory([]);
+  };
+
+  const deleteAccount=async()=>{
+    if(!username||!authToken) return;
+    try{
+      await fetch(API_URL+"/api/delete-account",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username,token:authToken})
+      });
+    }catch{}
+    logoutUser();
+  };
+
+  // Save points/history to backend
+  const saveToBackend=async(newPoints,newHistory)=>{
+    if(!username||!authToken) return;
+    try{
+      await fetch(API_URL+"/api/save",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username,token:authToken,points:newPoints,history:newHistory})
+      });
+    }catch{}
+  };
+
   // Daily login bonus
   useEffect(()=>{
     if(!username)return;
@@ -1827,10 +1887,12 @@ export default function App() {
   const savePoints=(p)=>{
     setPoints(p);
     if(username) localStorage.setItem(userKey(username,"points"),p.toString());
+    saveToBackend(p,history);
   };
   const saveHistory=(h)=>{
     setHistory(h);
     if(username) localStorage.setItem(userKey(username,"history"),JSON.stringify(h));
+    saveToBackend(points,h);
   };
   const addPts=p=>{const np=parseFloat((points+p).toFixed(1));savePoints(np);};
   const addHist=entry=>{saveHistory([...history,{...entry,ts:Date.now()}]);};
@@ -2029,58 +2091,52 @@ export default function App() {
 
         {/* ── LOGIN SCREEN ── */}
         {!username&&(
-          <div style={{minHeight:"80vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:0}}>
-            {/* Lang switcher on login */}
-            <div style={{display:"flex",gap:6,marginBottom:28}}>
+          <div style={{minHeight:"85vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:0}}>
+            {/* Lang switcher */}
+            <div style={{display:"flex",gap:6,marginBottom:24}}>
               {["de","en","it","fr"].map(l=><button key={l} onClick={()=>setLangS(l)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${lang===l?"#7C3AED":"rgba(255,255,255,0.1)"}`,background:lang===l?"rgba(124,58,237,0.25)":"transparent",color:lang===l?"#a78bfa":"#666",cursor:"pointer",fontSize:12,fontWeight:lang===l?"bold":"normal"}}>{l.toUpperCase()}</button>)}
             </div>
-            <div style={{fontSize:56,marginBottom:8}}>🦁</div>
-            <h1 style={{background:"linear-gradient(135deg,#7C3AED,#38BDF8,#10B981)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:"0 0 12px",fontSize:32,fontWeight:900,textAlign:"center",lineHeight:1.3,paddingBottom:4}}>{t.loginTitle}</h1>
-            <p style={{color:"#555",fontSize:14,margin:"0 0 28px",textAlign:"center"}}>{t.loginSubtitle}</p>
+            <div style={{fontSize:52,marginBottom:8}}>🚀</div>
+            <h1 style={{background:"linear-gradient(135deg,#7C3AED,#38BDF8,#10B981)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:"0 0 6px",fontSize:32,fontWeight:900,textAlign:"center",lineHeight:1.3,paddingBottom:4}}>Study Quest</h1>
+            <p style={{color:"#555",fontSize:13,margin:"0 0 28px",textAlign:"center"}}>Learn. Earn. Play.</p>
 
-            {/* Existing users */}
-            {Object.keys(allUsers).length>0&&(
-              <div style={{width:"100%",maxWidth:360,marginBottom:20}}>
-                <div style={{fontSize:12,color:"#666",marginBottom:8,textAlign:"center"}}>{t.loginExisting}</div>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {Object.keys(allUsers).map(u=>(
-                    <div key={u} style={{display:"flex",gap:6,alignItems:"stretch"}}>
-                      <button onClick={()=>loginUser(u)} style={{flex:1,display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderRadius:13,border:"1px solid rgba(124,58,237,0.3)",background:"rgba(124,58,237,0.08)",color:"#fff",cursor:"pointer",transition:"all 0.15s"}}
-                        onMouseEnter={e=>{e.currentTarget.style.background="rgba(124,58,237,0.2)";e.currentTarget.style.borderColor="#7C3AED";}}
-                        onMouseLeave={e=>{e.currentTarget.style.background="rgba(124,58,237,0.08)";e.currentTarget.style.borderColor="rgba(124,58,237,0.3)";}}>
-                        <div style={{display:"flex",alignItems:"center",gap:10}}>
-                          <span style={{fontSize:22}}>👤</span>
-                          <div>
-                            <div style={{fontWeight:700,fontSize:14}}>{u}</div>
-                            <div style={{fontSize:11,color:"#888"}}>{parseFloat(localStorage.getItem(`sq_user_${u}_points`)||"0")} ⭐ · {JSON.parse(localStorage.getItem(`sq_user_${u}_history`)||"[]").length} Sessions</div>
-                          </div>
-                        </div>
-                        <span style={{color:"#a78bfa",fontSize:12,fontWeight:600}}>{t.loginContinue} →</span>
-                      </button>
-                      <button onClick={()=>{const ex=JSON.parse(localStorage.getItem("sq_users")||"{}");delete ex[u];localStorage.setItem("sq_users",JSON.stringify(ex));["points","history","lastBonus"].forEach(k=>localStorage.removeItem(`sq_user_${u}_${k}`));["gravity","snake","breaker","cipher","reflex"].forEach(gid=>localStorage.removeItem(`sq_game_${u}_${gid}_scores`));setAllUsers({...ex});if(username===u)logoutUser();}} style={{padding:"11px 12px",borderRadius:11,border:"1px solid rgba(239,68,68,0.35)",background:"rgba(239,68,68,0.1)",color:"#EF4444",cursor:"pointer",fontSize:16,fontWeight:"bold",flexShrink:0}} title="Delete account">🗑️</button>
-                    </div>
-                  ))}
-                </div>
-                <div style={{textAlign:"center",color:"#444",fontSize:12,margin:"14px 0 6px"}}>{t.loginOr}</div>
-              </div>
-            )}
-
-            {/* New user input */}
             <div style={{width:"100%",maxWidth:360}}>
-              <div style={{fontSize:12,color:"#666",marginBottom:8,textAlign:"center"}}>{t.loginCreate}</div>
-              {loginStep==="name"&&<div style={{display:"flex",gap:8}}>
+              {/* Toggle Login/Register */}
+              <div style={{display:"flex",gap:0,marginBottom:20,background:"rgba(255,255,255,0.05)",borderRadius:12,padding:3}}>
+                <button onClick={()=>{setAuthMode("login");setAuthError(null);}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:authMode==="login"?"linear-gradient(135deg,#7C3AED,#4C1D95)":"transparent",color:authMode==="login"?"#fff":"#666",fontWeight:authMode==="login"?"bold":"normal",cursor:"pointer",fontSize:14,transition:"all 0.2s"}}>
+                  {lang==="de"?"Anmelden":lang==="en"?"Login":lang==="it"?"Accedi":"Connexion"}
+                </button>
+                <button onClick={()=>{setAuthMode("register");setAuthError(null);}} style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:authMode==="register"?"linear-gradient(135deg,#7C3AED,#4C1D95)":"transparent",color:authMode==="register"?"#fff":"#666",fontWeight:authMode==="register"?"bold":"normal",cursor:"pointer",fontSize:14,transition:"all 0.2s"}}>
+                  {lang==="de"?"Registrieren":lang==="en"?"Register":lang==="it"?"Registrati":"S'inscrire"}
+                </button>
+              </div>
+
+              {/* Form */}
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 <input
                   value={usernameInput}
                   onChange={e=>setUsernameInput(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&usernameInput.trim()&&loginUser(usernameInput)}
-                  placeholder={t.loginPlaceholder}
+                  placeholder={lang==="de"?"Benutzername":lang==="en"?"Username":lang==="it"?"Nome utente":"Nom d'utilisateur"}
                   maxLength={20}
-                  style={{flex:1,background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none"}}
+                  style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none",width:"100%"}}
                 />
-                <button onClick={()=>usernameInput.trim()&&loginUser(usernameInput)} disabled={!usernameInput.trim()} style={{padding:"13px 18px",borderRadius:12,background:usernameInput.trim()?"linear-gradient(135deg,#7C3AED,#4C1D95)":"rgba(255,255,255,0.07)",color:usernameInput.trim()?"#fff":"#555",border:"none",fontWeight:"bold",cursor:usernameInput.trim()?"pointer":"default",fontSize:15,whiteSpace:"nowrap"}}>
-                  →
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={e=>setPasswordInput(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&handleAuth()}
+                  placeholder={lang==="de"?"Passwort":lang==="en"?"Password":lang==="it"?"Password":"Mot de passe"}
+                  style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none",width:"100%"}}
+                />
+                {authError&&<div style={{color:"#EF4444",fontSize:13,textAlign:"center",padding:"8px",background:"rgba(239,68,68,0.1)",borderRadius:8}}>{authError}</div>}
+                <button onClick={handleAuth} disabled={authLoading||!usernameInput.trim()||!passwordInput.trim()} style={{padding:"14px",borderRadius:12,background:(!authLoading&&usernameInput.trim()&&passwordInput.trim())?"linear-gradient(135deg,#7C3AED,#4C1D95)":"rgba(255,255,255,0.07)",color:(!authLoading&&usernameInput.trim()&&passwordInput.trim())?"#fff":"#555",border:"none",fontWeight:"bold",cursor:"pointer",fontSize:15,transition:"all 0.2s"}}>
+                  {authLoading?"⏳ Loading…":authMode==="login"?(lang==="de"?"▶ Anmelden":lang==="en"?"▶ Login":lang==="it"?"▶ Accedi":"▶ Connexion"):(lang==="de"?"✅ Registrieren":lang==="en"?"✅ Register":lang==="it"?"✅ Registrati":"✅ S'inscrire")}
                 </button>
-              </div>}
+              </div>
+
+              {authMode==="register"&&<p style={{color:"#555",fontSize:11,textAlign:"center",marginTop:10}}>
+                {lang==="de"?"Passwort mind. 4 Zeichen":lang==="en"?"Password min. 4 characters":lang==="it"?"Password min. 4 caratteri":"Mot de passe min. 4 caractères"}
+              </p>}
             </div>
           </div>
         )}
@@ -2155,6 +2211,7 @@ export default function App() {
                 <div style={{display:"flex",alignItems:"center",gap:7,marginTop:3}}>
                   <span style={{fontSize:13,color:"#a78bfa",fontWeight:600}}>{username}</span>
                   <button onClick={logoutUser} style={{fontSize:10,color:"#444",background:"none",border:"none",cursor:"pointer",textDecoration:"underline",padding:0}}>{t.switchUser}</button>
+                  <button onClick={deleteAccount} style={{fontSize:10,color:"#EF4444",background:"none",border:"none",cursor:"pointer",textDecoration:"underline",padding:0}}>🗑️ Delete</button>
                 </div>
               </div>
             </div>
