@@ -1852,16 +1852,15 @@ export default function App() {
     }catch{}
   };
 
-  // Daily login bonus
+  // Daily login bonus - uses server lastBonus to persist across devices
   useEffect(()=>{
-    if(!username)return;
-    const key=userKey(username,"lastBonus");
-    const last=localStorage.getItem(key);
+    if(!username||!authToken)return;
     const today=new Date().toDateString();
-    if(last!==today){
-      localStorage.setItem(key,today);
-      setTimeout(()=>{addPts(1);toast_("🎁 Daily Bonus! +1 ⭐","#FFD700");},800);
-    }
+    const localKey=`sq_lastBonus_${username}`;
+    const lastLocal=localStorage.getItem(localKey);
+    if(lastLocal===today)return; // Already got bonus today on this device
+    localStorage.setItem(localKey,today);
+    setTimeout(()=>{addPts(1);toast_("🎁 Daily Bonus! +1 ⭐","#FFD700");},800);
   },[username]);
 
   // Clear old history on mount and every hour
@@ -1948,7 +1947,7 @@ export default function App() {
     // ── Global study timer – keeps ticking even during midpoint/quiz screens ──
   const studyTickRef=useRef(null);
   useEffect(()=>{
-    const active=["learning","midpoint"].includes(screen)&&dur&&dur.minutes>0;
+    const active=["learning","midpoint"].includes(screen)&&dur&&dur.minutes>0&&studySecs>0;
     if(!active){ clearInterval(studyTickRef.current); return; }
     studyTickRef.current=setInterval(()=>{
       setStudySecs(s=>{
