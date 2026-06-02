@@ -7,14 +7,27 @@ export default async function handler(req, res) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'No API key' });
  
-  // Vercel with "type":"module" auto-parses body as object
-  const body = req.body || {};
+  let body = {};
+  try {
+    // Read raw stream - works regardless of type:module
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    }
+    const raw = Buffer.concat(chunks).toString('utf-8');
+    if (raw && raw.trim()) {
+      body = JSON.parse(raw);
+    }
+  } catch(e) {
+    return res.status(400).json({ error: 'Parse error: ' + e.message });
+  }
+ 
   const system = body.system || '';
   const messages = body.messages || [];
   const maxTokens = body.maxTokens || 1000;
  
   if (!messages.length) {
-    return res.status(400).json({ error: 'No messages provided', body: JSON.stringify(body) });
+    return res.status(400).json({ error: 'No messages', received: JSON.stringify(body).substring(0, 100) });
   }
  
   const contents = [];
@@ -65,3 +78,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message });
   }
 }
+ 
