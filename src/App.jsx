@@ -499,12 +499,14 @@ const DURATIONS = [
 
 // ── API CALL ──────────────────────────────────────────────────────────────────
 async function callClaude(messages, system, maxTokens=1000) {
+  const payload = JSON.stringify({system, messages, maxTokens});
   const res = await fetch("/api/gemini",{
-    method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({system, messages, maxTokens})
+    method:"POST",
+    headers:{"Content-Type":"text/plain"},
+    body:payload
   });
   const data = await res.json();
-  return data.text||data.text||data.content?.map(c=>c.text||"").join("")||"";
+  return data.text||data.content?.map(c=>c.text||"").join("")||"";
 }
 
 // ── PARKOUR: GAME COMMENT PLACEHOLDER ────────────────────────────────────────
@@ -986,7 +988,7 @@ Language: ${ln}.`;
 
       const res=await fetch("/api/gemini",{
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{"Content-Type":"text/plain"},
         body:JSON.stringify({system:"You are a quiz generator. You ONLY output raw valid JSON arrays. Never add markdown, never add explanations.",messages:[{role:"user",content:prompt}],maxTokens:4000})
       });
       if(!res.ok) throw new Error(`API error ${res.status}`);
@@ -1562,7 +1564,7 @@ CRITICAL: Return ONLY a raw JSON array, no markdown, no code fences:
 [{"q":"question","options":["A","B","C","D"],"answer":0}]
 "answer" is the integer index (0-3) of the correct option.`;
       const res=await fetch("/api/gemini",{
-        method:"POST",headers:{"Content-Type":"application/json"},
+        method:"POST",headers:{"Content-Type":"text/plain"},
         body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown, no explanation.",messages:[{role:"user",content:prompt}],maxTokens:extended?6000:4000})
       });
       const data=await res.json();
@@ -1681,7 +1683,7 @@ function PeriodicQuiz({subject,topic,lang,onFinish}){
   const ln={de:"German",en:"English",it:"Italian",fr:"French"}[lang];
   useEffect(()=>{(async()=>{
     try{
-      const res=await fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown.",messages:[{role:"user",content:`Generate exactly 10 multiple-choice quiz questions about "${topic}" (subject: ${subject}) for students aged 13-15. Language: ${ln}. Return ONLY raw JSON: [{"q":"question","options":["A","B","C","D"],"answer":0}]`}],maxTokens:2500})});
+      const res=await fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown.",messages:[{role:"user",content:`Generate exactly 10 multiple-choice quiz questions about "${topic}" (subject: ${subject}) for students aged 13-15. Language: ${ln}. Return ONLY raw JSON: [{"q":"question","options":["A","B","C","D"],"answer":0}]`}],maxTokens:2500})});
       const data=await res.json();
       const raw=data.text||data.content?.map(c=>c.text||"").join("")||"";
       let parsed=null;
