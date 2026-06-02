@@ -7,23 +7,17 @@ export default async function handler(req, res) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'No API key' });
  
-  let body;
-  try {
-    body = req.body && typeof req.body === 'object' ? req.body : JSON.parse(await new Promise((resolve, reject) => {
-      let d = '';
-      req.on('data', c => d += c);
-      req.on('end', () => resolve(d));
-      req.on('error', reject);
-    }));
-  } catch(e) {
-    return res.status(400).json({ error: 'Parse error: ' + e.message });
-  }
- 
+  // Vercel with "type":"module" auto-parses body as object
+  const body = req.body || {};
   const system = body.system || '';
   const messages = body.messages || [];
   const maxTokens = body.maxTokens || 1000;
-  const contents = [];
  
+  if (!messages.length) {
+    return res.status(400).json({ error: 'No messages provided', body: JSON.stringify(body) });
+  }
+ 
+  const contents = [];
   if (system) {
     contents.push({ role: 'user', parts: [{ text: 'System: ' + system }] });
     contents.push({ role: 'model', parts: [{ text: 'Understood.' }] });
