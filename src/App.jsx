@@ -1246,28 +1246,36 @@ function SummaryBot({subject,topic,lang,duration,onDone}) {
 }
 
 // ── CHAT HELPER ───────────────────────────────────────────────────────────────
-function ChatHelper({subject,topic,lang,phase,onPhaseComplete,onMessagesChange}) {
+function ChatHelper({subject,topic,lang,phase,onPhaseComplete,onMessagesChange,duration,gradeLevel}) {
   const t=T[lang]; const ln={de:"German",en:"English",it:"Italian",fr:"French"}[lang];
   const [messages,setMessages]=useState([]); const [input,setInput]=useState(""); const [loading,setLoading]=useState(false); const [imgB64,setImgB64]=useState(null); const [imgFile,setImgFile]=useState(null);
   const fileRef=useRef(null); const bottomRef=useRef(null);
+  const taskTimerRef=useRef(null);
+  const grade=gradeLevel||7;
+  const mins=duration?.minutes||5;
 
   const langSubjectMap={"English":"english","German":"german","Italian":"italian","French":"french"};
   const subjectLang=Object.entries(langSubjectMap).find(([,k])=>subject?.toLowerCase().includes(k))?.[0];
   const isNativeLevel = subjectLang && subjectLang===ln;
   const levelNote = subjectLang
-    ? (isNativeLevel ? `Use native-level ${ln} (C1-C2): rich vocab, complex grammar, idioms.`
-        : `Use ONLY beginner ${ln} (A1): the simplest words possible, very short sentences. Student is a beginner in ${ln}.`)
+    ? (isNativeLevel ? `Use native-level ${ln} (C1-C2).` : `Use ONLY beginner ${ln} (A1): simplest words, very short sentences.`)
     : "";
-  const sys=`You are a friendly, encouraging study assistant for students aged 10-15. Subject: "${subject}", Topic: "${topic}". Phase: ${phase}. Always respond in ${ln}. Be concise and supportive. ${levelNote}`;
+
+  const gradeNote=`The student is in grade ${grade} (age ${grade+5}-${grade+6}). Adapt difficulty accordingly: grade 1-4 = very simple, grade 5-7 = intermediate, grade 8-10 = advanced, grade 11-12 = near-university level.`;
+
+  const sys=`You are a friendly, encouraging study tutor for a grade ${grade} student (age ${grade+5}-${grade+6}). Subject: "${subject}", Topic: "${topic}". Always respond in ${ln}. Be concise, clear and supportive. ${levelNote} ${gradeNote}`;
 
   const updateMessages=(newMsgs)=>{ setMessages(newMsgs); onMessagesChange?.(newMsgs); };
 
-  const send=useCallback(async(text,b64=null)=>{
+  const send=useCallback(async(text,b64=null,isAuto=false)=>{
     if(!text.trim()&&!b64)return;
-    const newMsgs=[...messages,{role:"user",content:text,image:b64}];
-    updateMessages(newMsgs); setInput(""); setImgB64(null); setImgFile(null); setLoading(true);
+    const newMsgs=isAuto?[...messages,{role:"assistant",content:text,isAuto:true}]:[...messages,{role:"user",content:text,image:b64}];
+    if(!isAuto) updateMessages(newMsgs);
+    setLoading(true);
     try{
-      const hist=newMsgs.map(m=>({role:m.role,content:m.image?[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:m.image}},{type:"text",text:m.content}]:m.content}));
+      const msgToSend=isAuto?messages:[...messages,{role:"user",content:text,image:b64}];
+      const hist=msgToSend.map(m=>({role:m.role==="assistant"?"assistant":"user",content:m.image?[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:m.image}},{type:"text",text:m.content}]:m.content}));
+      if(isAuto) hist.push({role:"user",content:text});
       const reply=await callClaude(hist,sys);
       const withReply=[...newMsgs,{role:"assistant",content:reply}];
       updateMessages(withReply);
@@ -1276,18 +1284,54 @@ function ChatHelper({subject,topic,lang,phase,onPhaseComplete,onMessagesChange})
     setLoading(false);
   },[messages,sys,phase,onPhaseComplete]);
 
+  // Schedule automatic tasks based on session duration
   useEffect(()=>{
-    const init=phase==="mid"?`I'm halfway through studying "${topic}". Please give me feedback on my progress and tips for the second half.`:`I'm done studying "${topic}". Here is my final progress.`;
-    send(init);
+    if(phase!=="chat") return;
+    // Task intervals based on session length
+    const interval=mins<=5?120:mins<=15?180:mins<=30?240:300; // seconds between tasks
+    const taskPrompts=[
+      `Explain the key concepts of "${topic}" to a grade ${grade} student in ${ln}. Keep it short and engaging. Then ask one question to check understanding.`,
+      `Give a grade ${grade} student a practice exercise about "${topic}" in ${ln}. Make it appropriate for their level. Wait for their answer.`,
+      `Share an interesting real-world example of "${topic}" that a grade ${grade} student would find relatable. Then ask them to come up with their own example.`,
+      `Ask a grade ${grade} student a slightly more challenging question about "${topic}" in ${ln}. Encourage them if they struggle.`,
+      `Summarize what a grade ${grade} student should remember about "${topic}" in ${ln}. Give them a mini-quiz with 2 quick questions.`,
+    ];
+    let taskIdx=0;
+    // Send first guided message after 10 seconds
+    const firstTimer=setTimeout(()=>{
+      send(taskPrompts[taskIdx%taskPrompts.length],null,true);
+      taskIdx++;
+      // Then repeat every interval
+      taskTimerRef.current=setInterval(()=>{
+        send(taskPrompts[taskIdx%taskPrompts.length],null,true);
+        taskIdx++;
+      },interval*1000);
+    },10000);
+    return()=>{clearTimeout(firstTimer);clearInterval(taskTimerRef.current);};
+  },[]);
+
+  useEffect(()=>{
+    if(phase==="mid"||phase==="end"){
+      const init=phase==="mid"
+        ?`I'm halfway through studying "${topic}" (grade ${grade}). Please give me feedback and tips for the second half.`
+        :`I've finished studying "${topic}" (grade ${grade}). Here is my final progress.`;
+      send(init);
+    }
   },[]);
 
   useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[messages,loading]);
   const handleFile=e=>{const f=e.target.files[0];if(!f)return;setImgFile(f);const r=new FileReader();r.onload=ev=>setImgB64(ev.target.result.split(",")[1]);r.readAsDataURL(f);};
 
   return(<div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+    {phase==="chat"&&<div style={{padding:"6px 12px",borderBottom:"1px solid rgba(255,255,255,0.06)",fontSize:11,color:"#666",display:"flex",justifyContent:"space-between"}}>
+      <span>💬 {lang==="de"?"Frag den Chatbot!":lang==="en"?"Ask the chatbot!":lang==="it"?"Chiedi!":"Demande!"}</span>
+      <span style={{color:"#a78bfa"}}>📚 Grade {grade}</span>
+    </div>}
     <div style={{flex:1,overflowY:"auto",padding:12,display:"flex",flexDirection:"column",gap:9}}>
-      {messages.map((m,i)=><div key={i} style={{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"82%",background:m.role==="user"?"linear-gradient(135deg,#7C3AED,#5B21B6)":"rgba(255,255,255,0.07)",border:m.role==="assistant"?"1px solid rgba(255,255,255,0.08)":"none",borderRadius:m.role==="user"?"18px 18px 4px 18px":"18px 18px 18px 4px",padding:"10px 14px",color:"#fff",fontSize:13.5,lineHeight:1.65,whiteSpace:"pre-wrap"}}>
-        {m.image&&<div style={{fontSize:11,opacity:0.6,marginBottom:3}}>📷 {t.photoAttached}</div>}{m.content}
+      {messages.map((m,i)=><div key={i} style={{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"85%",background:m.role==="user"?"linear-gradient(135deg,#7C3AED,#5B21B6)":m.isAuto?"rgba(16,185,129,0.12)":"rgba(255,255,255,0.07)",border:m.role==="assistant"?`1px solid ${m.isAuto?"rgba(16,185,129,0.3)":"rgba(255,255,255,0.08)"}`:"none",borderRadius:m.role==="user"?"18px 18px 4px 18px":"18px 18px 18px 4px",padding:"10px 14px",color:"#fff",fontSize:13.5,lineHeight:1.65,whiteSpace:"pre-wrap"}}>
+        {m.isAuto&&<div style={{fontSize:10,color:"#10B981",marginBottom:4}}>🎓 Tutor</div>}
+        {m.image&&<div style={{fontSize:11,opacity:0.6,marginBottom:3}}>📷 {t.photoAttached}</div>}
+        {m.content}
       </div>)}
       {loading&&<div style={{alignSelf:"flex-start",display:"flex",gap:5,paddingLeft:4}}>{[0,1,2].map(i=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:"#7C3AED",animation:`pulse 1.2s ${i*0.2}s infinite`}}/>)}</div>}
       <div ref={bottomRef}/>
@@ -1745,6 +1789,8 @@ export default function App() {
   const [authMode,setAuthMode]=useState("login"); // "login" | "register"
   const [authError,setAuthError]=useState(null);
   const [authLoading,setAuthLoading]=useState(false);
+  const [gradeLevel,setGradeLevel]=useState(null);
+  const [userGrade,setUserGrade]=useState(()=>parseInt(localStorage.getItem("sq_grade")||"0")||null);
   const [allUsers,setAllUsers]=useState(()=>JSON.parse(localStorage.getItem("sq_users")||"{}"));
   const [screen,setScreen]=useState("home");
   const [subjects,setSubjects]=useState(()=>{const s=localStorage.getItem("sq_subjects");return s?JSON.parse(s):DEFAULT_SUBJECTS;});
@@ -1806,18 +1852,20 @@ export default function App() {
       const endpoint=authMode==="login"?"/api/login":"/api/register";
       const res=await fetch(API_URL+endpoint,{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({username:usernameInput.trim(),password:passwordInput})
+        body:JSON.stringify({username:usernameInput.trim(),password:passwordInput,grade:gradeLevel})
       });
       const data=await res.json();
       if(!res.ok||data.error){setAuthError(data.error||"Error");setAuthLoading(false);return;}
-      // Success
       const u=data.username;
       const tk=data.token;
+      const grade=data.grade||gradeLevel||null;
       localStorage.setItem("sq_activeUser",u);
       localStorage.setItem("sq_token",tk);
+      if(grade)localStorage.setItem("sq_grade",grade.toString());
       setUsername(u);setAuthToken(tk);
       setPoints(data.points||0);
       setHistory(data.history||[]);
+      setUserGrade(grade);
       setPasswordInput("");setUsernameInput("");
     }catch(e){setAuthError("Connection error — is the server running?");}
     setAuthLoading(false);
@@ -2104,30 +2152,38 @@ export default function App() {
 
               {/* Form */}
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                <input
-                  value={usernameInput}
-                  onChange={e=>setUsernameInput(e.target.value)}
+                <input value={usernameInput} onChange={e=>setUsernameInput(e.target.value)}
                   placeholder={lang==="de"?"Benutzername":lang==="en"?"Username":lang==="it"?"Nome utente":"Nom d'utilisateur"}
                   maxLength={20}
-                  style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none",width:"100%"}}
-                />
-                <input
-                  type="password"
-                  value={passwordInput}
-                  onChange={e=>setPasswordInput(e.target.value)}
-                  onKeyDown={e=>e.key==="Enter"&&handleAuth()}
+                  style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none",width:"100%"}}/>
+                <input type="password" value={passwordInput} onChange={e=>setPasswordInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAuth()}
                   placeholder={lang==="de"?"Passwort":lang==="en"?"Password":lang==="it"?"Password":"Mot de passe"}
-                  style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none",width:"100%"}}
-                />
+                  style={{background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:12,padding:"13px 16px",color:"#fff",fontSize:15,outline:"none",width:"100%"}}/>
+
+                {/* Grade level - only for registration */}
+                {authMode==="register"&&<div>
+                  <div style={{fontSize:12,color:"#888",marginBottom:6}}>
+                    {lang==="de"?"Klassenstufe":lang==="en"?"Grade Level":lang==="it"?"Classe":"Niveau scolaire"}
+                  </div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(g=>(
+                      <button key={g} onClick={()=>setGradeLevel(g)} style={{width:38,height:38,borderRadius:9,border:`2px solid ${gradeLevel===g?"#7C3AED":"rgba(255,255,255,0.1)"}`,background:gradeLevel===g?"rgba(124,58,237,0.3)":"rgba(255,255,255,0.05)",color:gradeLevel===g?"#fff":"#888",cursor:"pointer",fontSize:13,fontWeight:gradeLevel===g?"bold":"normal"}}>
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{fontSize:11,color:"#555",marginTop:5}}>
+                    {gradeLevel?(lang==="de"?`Klasse ${gradeLevel} ausgewählt`:lang==="en"?`Grade ${gradeLevel} selected`:lang==="it"?`Classe ${gradeLevel}`:lang==="fr"?`Classe ${gradeLevel}`:"")
+                    :(lang==="de"?"Bitte wähle deine Klasse":lang==="en"?"Please select your grade":lang==="it"?"Seleziona la tua classe":"Sélectionne ta classe")}
+                  </div>
+                </div>}
+
                 {authError&&<div style={{color:"#EF4444",fontSize:13,textAlign:"center",padding:"8px",background:"rgba(239,68,68,0.1)",borderRadius:8}}>{authError}</div>}
-                <button onClick={handleAuth} disabled={authLoading||!usernameInput.trim()||!passwordInput.trim()} style={{padding:"14px",borderRadius:12,background:(!authLoading&&usernameInput.trim()&&passwordInput.trim())?"linear-gradient(135deg,#7C3AED,#4C1D95)":"rgba(255,255,255,0.07)",color:(!authLoading&&usernameInput.trim()&&passwordInput.trim())?"#fff":"#555",border:"none",fontWeight:"bold",cursor:"pointer",fontSize:15,transition:"all 0.2s"}}>
+                <button onClick={handleAuth} disabled={authLoading||!usernameInput.trim()||!passwordInput.trim()||(authMode==="register"&&!gradeLevel)}
+                  style={{padding:"14px",borderRadius:12,background:(!authLoading&&usernameInput.trim()&&passwordInput.trim()&&(authMode==="login"||gradeLevel))?"linear-gradient(135deg,#7C3AED,#4C1D95)":"rgba(255,255,255,0.07)",color:(!authLoading&&usernameInput.trim()&&passwordInput.trim()&&(authMode==="login"||gradeLevel))?"#fff":"#555",border:"none",fontWeight:"bold",cursor:"pointer",fontSize:15,transition:"all 0.2s"}}>
                   {authLoading?"⏳ Loading…":authMode==="login"?(lang==="de"?"▶ Anmelden":lang==="en"?"▶ Login":lang==="it"?"▶ Accedi":"▶ Connexion"):(lang==="de"?"✅ Registrieren":lang==="en"?"✅ Register":lang==="it"?"✅ Registrati":"✅ S'inscrire")}
                 </button>
               </div>
-
-              {authMode==="register"&&<p style={{color:"#555",fontSize:11,textAlign:"center",marginTop:10}}>
-                {lang==="de"?"Passwort mind. 4 Zeichen":lang==="en"?"Password min. 4 characters":lang==="it"?"Password min. 4 caratteri":"Mot de passe min. 4 caractères"}
-              </p>}
             </div>
           </div>
         )}
@@ -2322,7 +2378,7 @@ export default function App() {
             <div style={{padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,0.07)",fontSize:12,color:"#888",display:"flex",alignItems:"center",gap:6}}>
               💬 <span>{lang==="de"?"Frag den Chatbot – er hilft dir beim Lernen!":lang==="en"?"Ask the chatbot – it helps you learn!":lang==="it"?"Chiedi al chatbot – ti aiuta a studiare!":"Demande au chatbot – il t'aide à apprendre!"}</span>
             </div>
-            <ChatHelper subject={subName(sel)} topic={topic} lang={lang} phase="chat" onMessagesChange={msgs=>setChatHistory(msgs)}/>
+            <ChatHelper subject={subName(sel)} topic={topic} lang={lang} phase="chat" duration={dur} gradeLevel={userGrade} onMessagesChange={msgs=>setChatHistory(msgs)}/>
           </div>
         </>}
 
