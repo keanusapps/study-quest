@@ -1,30 +1,16 @@
-export const config = { runtime: 'edge' };
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
  
-export default async function handler(req) {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      }
-    });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
  
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Content-Type': 'application/json',
-  };
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'No API key found' });
  
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'Missing GEMINI_API_KEY' }), { status: 500, headers });
-    }
- 
-    const body = await req.json();
-    const { system, messages, maxTokens = 1000 } = body;
- 
+    const { system, messages, maxTokens = 1000 } = req.body;
     const contents = [];
  
     if (system) {
@@ -35,7 +21,6 @@ export default async function handler(req) {
     for (const m of (messages || [])) {
       const role = m.role === 'assistant' ? 'model' : 'user';
       let parts = [];
- 
       if (typeof m.content === 'string') {
         parts = [{ text: m.content }];
       } else if (Array.isArray(m.content)) {
@@ -46,7 +31,6 @@ export default async function handler(req) {
           }
         }
       }
- 
       if (parts.length > 0) contents.push({ role, parts });
     }
  
@@ -55,34 +39,24 @@ export default async function handler(req) {
     }
  
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
- 
     const geminiRes = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents,
-        generationConfig: {
-          maxOutputTokens: Math.min(maxTokens * 2, 8192),
-          temperature: 0.7,
-        }
+        generationConfig: { maxOutputTokens: Math.min(maxTokens * 2, 8192), temperature: 0.7 }
       })
     });
  
     const data = await geminiRes.json();
- 
-    if (!geminiRes.ok) {
-      return new Response(JSON.stringify({ error: data.error?.message || 'Gemini error' }), { status: 500, headers });
-    }
+    if (!geminiRes.ok) return res.status(500).json({ error: data.error?.message || 'Gemini error', details: data });
  
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text) return res.status(500).json({ error: 'Empty response', raw: data });
  
-    if (!text) {
-      return new Response(JSON.stringify({ error: 'Empty response', raw: JSON.stringify(data) }), { status: 500, headers });
-    }
- 
-    return new Response(JSON.stringify({ text }), { status: 200, headers });
+    return res.status(200).json({ text });
  
   } catch (e) {
-    return new Response(JSON.stringify({ error: e.message, stack: e.stack }), { status: 500, headers });
+    return res.status(500).json({ error: e.message });
   }
 }
