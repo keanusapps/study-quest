@@ -1940,7 +1940,7 @@ export default function App() {
   const gm=Math.floor(gameTimerSecs/60), gs=gameTimerSecs%60;
 
   return(
-    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#06061a 0%,#0d0a2e 30%,#080f2a 60%,#06061a 100%)",color:"#fff",fontFamily:"'Outfit','Segoe UI',sans-serif",position:"relative",overflow:"hidden"}}>
+    <div style={{minHeight:"100vh",minHeight:"100dvh",background:"linear-gradient(135deg,#06061a 0%,#0d0a2e 30%,#080f2a 60%,#06061a 100%)",color:"#fff",fontFamily:"'Outfit','Segoe UI',sans-serif",position:"relative",overflow:"hidden",paddingLeft:"env(safe-area-inset-left)",paddingRight:"env(safe-area-inset-right)"}}>
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&display=swap" rel="stylesheet"/>
       {splash&&<SplashScreen onDone={()=>setSplash(false)}/>}
 
@@ -2023,7 +2023,7 @@ export default function App() {
         </div>
       )}
 
-      <div style={{maxWidth:720,margin:"0 auto",padding:"20px 16px",position:"relative",zIndex:1,animation:"fadeUp 0.4s ease"}}>
+      <div style={{maxWidth:720,margin:"0 auto",padding:"max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)) 16px",position:"relative",zIndex:1,animation:"fadeUp 0.4s ease"}}>
 
         {/* ── LOGIN SCREEN ── */}
         {!username&&(
