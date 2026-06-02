@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -8,34 +8,24 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'No API key' });
  
   try {
-    let parsed;
-    try {
-      if (req.body && typeof req.body === 'object') {
-        parsed = req.body;
-        console.log('Body source: already parsed object');
-      } else {
-        const rawBody = await new Promise((resolve, reject) => {
-          let data = '';
-          req.on('data', chunk => { data += chunk.toString(); });
-          req.on('end', () => resolve(data));
-          req.on('error', reject);
-        });
-        console.log('Raw body length:', rawBody.length, 'first 100:', rawBody.substring(0, 100));
-        parsed = JSON.parse(rawBody);
-      }
-    } catch(parseErr) {
-      return res.status(400).json({ error: 'Body parse failed: ' + parseErr.message });
+    let body = req.body;
+    if (!body || typeof body !== 'object') {
+      const raw = await new Promise((resolve, reject) => {
+        let d = '';
+        req.on('data', c => d += c);
+        req.on('end', () => resolve(d));
+        req.on('error', reject);
+      });
+      body = JSON.parse(raw);
     }
  
-    const system = parsed.system || '';
-    const messages = parsed.messages || [];
-    const maxTokens = parsed.maxTokens || 1000;
-    
-    console.log('system length:', system.length, 'messages count:', messages.length);
+    const system = body.system || '';
+    const messages = body.messages || [];
+    const maxTokens = body.maxTokens || 1000;
  
     const contents = [];
     if (system) {
-      contents.push({ role: 'user', parts: [{ text: `System: ${system}` }] });
+      contents.push({ role: 'user', parts: [{ text: 'System: ' + system }] });
       contents.push({ role: 'model', parts: [{ text: 'Understood.' }] });
     }
  
@@ -47,42 +37,44 @@ export default async function handler(req, res) {
       } else if (Array.isArray(m.content)) {
         for (const p of m.content) {
           if (p.type === 'text') parts.push({ text: p.text });
-          else if (p.type === 'image' && p.source?.data) {
+          else if (p.type === 'image' && p.source && p.source.data) {
             parts.push({ inlineData: { mimeType: p.source.media_type || 'image/jpeg', data: p.source.data } });
           }
         }
       }
-      if (parts.length > 0) contents.push({ role, parts });
+      if (parts.length > 0) contents.push({ role: role, parts: parts });
     }
  
-    if (!contents.length || contents[contents.length - 1].role === 'model') {
+    if (contents.length === 0 || contents[contents.length - 1].role === 'model') {
       contents.push({ role: 'user', parts: [{ text: 'Please respond.' }] });
     }
  
-    console.log('Calling Gemini with', contents.length, 'content items');
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey;
  
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
     const geminiRes = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents,
+        contents: contents,
         generationConfig: { maxOutputTokens: Math.min(maxTokens * 2, 8192), temperature: 0.7 }
       })
     });
  
-    console.log('Gemini status:', geminiRes.status);
     const data = await geminiRes.json();
-    
-    if (!geminiRes.ok) return res.status(500).json({ error: data.error?.message, details: data });
  
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!geminiRes.ok) {
+      return res.status(500).json({ error: data.error ? data.error.message : 'Gemini error', status: geminiRes.status });
+    }
+ 
+    const text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] ? data.candidates[0].content.parts[0].text : '';
+ 
     if (!text) return res.status(500).json({ error: 'Empty response', raw: data });
  
-    return res.status(200).json({ text });
+    return res.status(200).json({ text: text });
  
   } catch (e) {
-    console.log('Caught error:', e.message);
-    return res.status(500).json({ error: e.message, stack: e.stack });
+    return res.status(500).json({ error: e.message });
   }
 }
+ 
+module.exports = handler;
