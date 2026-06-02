@@ -3,27 +3,41 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-
+ 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'No API key' });
-
+ 
   try {
-    // Read raw body stream
-    const rawBody = await new Promise((resolve, reject) => {
-      let data = '';
-      req.on('data', chunk => data += chunk);
-      req.on('end', () => resolve(data));
-      req.on('error', reject);
-    });
-
-    const { system, messages, maxTokens = 1000 } = JSON.parse(rawBody);
+    // Try all possible ways to get the body
+    let parsed;
+    
+    if (req.body && typeof req.body === 'object') {
+      // Already parsed
+      parsed = req.body;
+    } else if (req.body && typeof req.body === 'string') {
+      parsed = JSON.parse(req.body);
+    } else {
+      // Read stream
+      const rawBody = await new Promise((resolve, reject) => {
+        let data = '';
+        req.on('data', chunk => { data += chunk.toString(); });
+        req.on('end', () => resolve(data));
+        req.on('error', reject);
+      });
+      if (!rawBody || rawBody.trim() === '') {
+        return res.status(400).json({ error: 'Empty body received' });
+      }
+      parsed = JSON.parse(rawBody);
+    }
+ 
+    const { system, messages, maxTokens = 1000 } = parsed;
     const contents = [];
-
+ 
     if (system) {
       contents.push({ role: 'user', parts: [{ text: `System: ${system}` }] });
       contents.push({ role: 'model', parts: [{ text: 'Understood.' }] });
     }
-
+ 
     for (const m of (messages || [])) {
       const role = m.role === 'assistant' ? 'model' : 'user';
       let parts = [];
@@ -39,12 +53,13 @@ export default async function handler(req, res) {
       }
       if (parts.length > 0) contents.push({ role, parts });
     }
-
+ 
     if (!contents.length || contents[contents.length - 1].role === 'model') {
       contents.push({ role: 'user', parts: [{ text: 'Please respond.' }] });
     }
-
+ 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+ 
     const geminiRes = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -53,15 +68,15 @@ export default async function handler(req, res) {
         generationConfig: { maxOutputTokens: Math.min(maxTokens * 2, 8192), temperature: 0.7 }
       })
     });
-
+ 
     const data = await geminiRes.json();
     if (!geminiRes.ok) return res.status(500).json({ error: data.error?.message, details: data });
-
+ 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!text) return res.status(500).json({ error: 'Empty response', raw: data });
-
+ 
     return res.status(200).json({ text });
-
+ 
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
