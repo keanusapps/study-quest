@@ -36,15 +36,14 @@ app.get('/', (req, res) => {
 app.get('/api/debug', async (req, res) => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return res.json({ error: 'No API key' });
-  
   try {
-    // List available models
-    const listRes = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey
+    const geminiRes = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=' + apiKey,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say hello in one word.' }] }] }) }
     );
-    const listData = await listRes.json();
-    const models = listData.models?.map(m => m.name) || [];
-    return res.json({ availableModels: models });
+    const data = await geminiRes.json();
+    return res.json({ status: geminiRes.status, ok: geminiRes.ok, text: data.candidates?.[0]?.content?.parts?.[0]?.text });
   } catch(e) {
     return res.json({ error: e.message });
   }
@@ -146,7 +145,7 @@ app.post('/api/gemini', async (req, res) => {
  
   try {
     const geminiRes = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + apiKey,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=' + apiKey,
       { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: Math.min(maxTokens * 2, 8192), temperature: 0.7 } }) }
     );
