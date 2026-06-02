@@ -9,13 +9,14 @@ export default async function handler(req, res) {
  
   let body = {};
   try {
-    if (req.body && Object.keys(req.body).length > 0) {
-      body = req.body;
-    } else {
-      const buffers = [];
-      for await (const chunk of req) buffers.push(chunk);
-      const raw = Buffer.concat(buffers).toString();
-      if (raw.trim()) body = JSON.parse(raw);
+    // Read raw stream - works with text/plain and application/json
+    const buffers = [];
+    for await (const chunk of req) {
+      buffers.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+    }
+    const raw = Buffer.concat(buffers).toString('utf-8');
+    if (raw && raw.trim()) {
+      body = JSON.parse(raw.trim());
     }
   } catch(e) {
     return res.status(400).json({ error: 'Parse: ' + e.message });
@@ -37,7 +38,9 @@ export default async function handler(req, res) {
     else if (Array.isArray(m.content)) {
       for (const p of m.content) {
         if (p.type === 'text') parts.push({ text: p.text });
-        else if (p.type === 'image' && p.source?.data) parts.push({ inlineData: { mimeType: p.source.media_type || 'image/jpeg', data: p.source.data } });
+        else if (p.type === 'image' && p.source?.data) {
+          parts.push({ inlineData: { mimeType: p.source.media_type || 'image/jpeg', data: p.source.data } });
+        }
       }
     }
     if (parts.length) contents.push({ role, parts });
@@ -50,8 +53,11 @@ export default async function handler(req, res) {
   try {
     const geminiRes = await fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: Math.min(maxTokens * 2, 8192), temperature: 0.7 } }) }
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: Math.min(maxTokens * 2, 8192), temperature: 0.7 } })
+      }
     );
     const data = await geminiRes.json();
     if (!geminiRes.ok) return res.status(500).json({ error: data.error?.message, status: geminiRes.status });
