@@ -499,12 +499,12 @@ const DURATIONS = [
 
 // ── API CALL ──────────────────────────────────────────────────────────────────
 async function callClaude(messages, system, maxTokens=1000) {
-  const res = await fetch("https://api.anthropic.com/v1/messages",{
+  const res = await fetch("/api/gemini",{
     method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:maxTokens,system,messages})
+    body:JSON.stringify({system, messages, maxTokens})
   });
   const data = await res.json();
-  return data.content?.map(c=>c.text||"").join("")||"";
+  return data.text||data.text||data.content?.map(c=>c.text||"").join("")||"";
 }
 
 // ── PARKOUR: GAME COMMENT PLACEHOLDER ────────────────────────────────────────
@@ -984,20 +984,15 @@ Format: [{"q":"question text","options":["option1","option2","option3","option4"
 "answer" must be the integer index (0, 1, 2, or 3) of the correct option.
 Language: ${ln}.`;
 
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/gemini",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:4000,
-          system:"You are a quiz generator. You ONLY output raw valid JSON arrays. Never add markdown, never add explanations.",
-          messages:[{role:"user",content:prompt}]
-        })
+        body:JSON.stringify({system:"You are a quiz generator. You ONLY output raw valid JSON arrays. Never add markdown, never add explanations.",messages:[{role:"user",content:prompt}],maxTokens:4000})
       });
       if(!res.ok) throw new Error(`API error ${res.status}`);
       const data=await res.json();
       if(data.error) throw new Error(data.error.message||"API error");
-      const raw=data.content?.map(c=>c.text||"").join("")||"";
+      const raw=data.text||data.content?.map(c=>c.text||"").join("")||"";
 
       // Robust JSON extraction
       let parsed=null;
@@ -1337,16 +1332,13 @@ CRITICAL: Return ONLY a raw JSON array, no markdown, no code fences:
 [{"q":"question","options":["A","B","C","D"],"answer":0}]
 "answer" is the integer index (0-3) of the correct option.`;
 
-        const res=await fetch("https://api.anthropic.com/v1/messages",{
+        const res=await fetch("/api/gemini",{
           method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            model:"claude-sonnet-4-20250514",max_tokens:2000,
-            system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown, no explanation.",
-            messages:[{role:"user",content:prompt}]
-          })
+          body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown, no explanation.",messages:[{role:"user",content:prompt}]
+          ,maxTokens:2000})
         });
         const data=await res.json();
-        const raw=data.content?.map(c=>c.text||"").join("")||"";
+        const raw=data.text||data.content?.map(c=>c.text||"").join("")||"";
         let parsed=null;
         try{parsed=JSON.parse(raw.trim());}catch{
           const s=raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim();
@@ -1569,14 +1561,12 @@ function FinalQuiz({topic,subject,lang,onDone,extended=false}) {
 CRITICAL: Return ONLY a raw JSON array, no markdown, no code fences:
 [{"q":"question","options":["A","B","C","D"],"answer":0}]
 "answer" is the integer index (0-3) of the correct option.`;
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
+      const res=await fetch("/api/gemini",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:extended?6000:4000,
-          system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown, no explanation.",
-          messages:[{role:"user",content:prompt}]})
+        body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown, no explanation.",messages:[{role:"user",content:prompt}],maxTokens:extended?6000:4000})
       });
       const data=await res.json();
-      const raw=data.content?.map(c=>c.text||"").join("")||"";
+      const raw=data.text||data.content?.map(c=>c.text||"").join("")||"";
       let parsed=null;
       try{parsed=JSON.parse(raw.trim());}catch{
         const s=raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim();
@@ -1691,9 +1681,9 @@ function PeriodicQuiz({subject,topic,lang,onFinish}){
   const ln={de:"German",en:"English",it:"Italian",fr:"French"}[lang];
   useEffect(()=>{(async()=>{
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2500,system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown.",messages:[{role:"user",content:`Generate exactly 10 multiple-choice quiz questions about "${topic}" (subject: ${subject}) for students aged 13-15. Language: ${ln}. Return ONLY raw JSON: [{"q":"question","options":["A","B","C","D"],"answer":0}]`}]})});
+      const res=await fetch("/api/gemini",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system:"You are a quiz generator. Output ONLY valid raw JSON arrays. No markdown.",messages:[{role:"user",content:`Generate exactly 10 multiple-choice quiz questions about "${topic}" (subject: ${subject}) for students aged 13-15. Language: ${ln}. Return ONLY raw JSON: [{"q":"question","options":["A","B","C","D"],"answer":0}]`}],maxTokens:2500})});
       const data=await res.json();
-      const raw=data.content?.map(c=>c.text||"").join("")||"";
+      const raw=data.text||data.content?.map(c=>c.text||"").join("")||"";
       let parsed=null;
       try{parsed=JSON.parse(raw.trim());}catch{const s=raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim();try{parsed=JSON.parse(s);}catch{const i=raw.indexOf("["),j=raw.lastIndexOf("]");if(i!==-1&&j>i)parsed=JSON.parse(raw.slice(i,j+1));else throw new Error("No JSON");}}
       const valid=parsed.filter(q=>q&&typeof q.q==="string"&&Array.isArray(q.options)&&q.options.length===4&&typeof q.answer==="number");
@@ -2352,3 +2342,7 @@ export default function App() {
             <button onClick={()=>{if(!newName.trim())return;const ns={id:`c_${Date.now()}`,name:newName,icon:newIcon,color:newColor};const u=[...subjects,ns];setSubjects(u);localStorage.setItem("sq_subjects",JSON.stringify(u));toast_(`✅ "${newName}" hinzugefügt`,"#10B981");setNewName("");go("home");}} style={btnPrimary}>{t.addBtn}</button>
           </div>
         </>}
+
+      </div>    </div>
+  );
+}
