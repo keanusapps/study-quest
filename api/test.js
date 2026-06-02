@@ -1,16 +1,9 @@
-export const config = { runtime: 'edge' };
- 
-export default async function handler(req) {
-  const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
-  
-  // Show all env variables that exist (without showing values)
-  const envKeys = Object.keys(process.env).filter(k => !k.includes('SECRET'));
-  const hasGemini = !!process.env.GEMINI_API_KEY;
-  const keyLength = process.env.GEMINI_API_KEY?.length || 0;
-  
-  return new Response(JSON.stringify({ 
-    hasGeminiKey: hasGemini,
-    keyLength: keyLength,
-    allEnvKeys: envKeys
-  }), { headers });
+export default async function handler(req, res) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  res.status(200).json({
+    hasKey: !!apiKey,
+    keyLength: apiKey?.length || 0,
+    keyStart: apiKey ? apiKey.substring(0, 6) + '...' : 'none'
+  });
 }
+ 
