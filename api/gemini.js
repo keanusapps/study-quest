@@ -8,37 +8,38 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'No API key' });
  
   try {
-    // Try all possible ways to get the body
     let parsed;
-    
-    if (req.body && typeof req.body === 'object') {
-      // Already parsed
-      parsed = req.body;
-    } else if (req.body && typeof req.body === 'string') {
-      parsed = JSON.parse(req.body);
-    } else {
-      // Read stream
-      const rawBody = await new Promise((resolve, reject) => {
-        let data = '';
-        req.on('data', chunk => { data += chunk.toString(); });
-        req.on('end', () => resolve(data));
-        req.on('error', reject);
-      });
-      if (!rawBody || rawBody.trim() === '') {
-        return res.status(400).json({ error: 'Empty body received' });
+    try {
+      if (req.body && typeof req.body === 'object') {
+        parsed = req.body;
+        console.log('Body source: already parsed object');
+      } else {
+        const rawBody = await new Promise((resolve, reject) => {
+          let data = '';
+          req.on('data', chunk => { data += chunk.toString(); });
+          req.on('end', () => resolve(data));
+          req.on('error', reject);
+        });
+        console.log('Raw body length:', rawBody.length, 'first 100:', rawBody.substring(0, 100));
+        parsed = JSON.parse(rawBody);
       }
-      parsed = JSON.parse(rawBody);
+    } catch(parseErr) {
+      return res.status(400).json({ error: 'Body parse failed: ' + parseErr.message });
     }
  
-    const { system, messages, maxTokens = 1000 } = parsed;
-    const contents = [];
+    const system = parsed.system || '';
+    const messages = parsed.messages || [];
+    const maxTokens = parsed.maxTokens || 1000;
+    
+    console.log('system length:', system.length, 'messages count:', messages.length);
  
+    const contents = [];
     if (system) {
       contents.push({ role: 'user', parts: [{ text: `System: ${system}` }] });
       contents.push({ role: 'model', parts: [{ text: 'Understood.' }] });
     }
  
-    for (const m of (messages || [])) {
+    for (const m of messages) {
       const role = m.role === 'assistant' ? 'model' : 'user';
       let parts = [];
       if (typeof m.content === 'string') {
@@ -58,8 +59,9 @@ export default async function handler(req, res) {
       contents.push({ role: 'user', parts: [{ text: 'Please respond.' }] });
     }
  
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    console.log('Calling Gemini with', contents.length, 'content items');
  
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
     const geminiRes = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -69,7 +71,9 @@ export default async function handler(req, res) {
       })
     });
  
+    console.log('Gemini status:', geminiRes.status);
     const data = await geminiRes.json();
+    
     if (!geminiRes.ok) return res.status(500).json({ error: data.error?.message, details: data });
  
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -78,6 +82,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ text });
  
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    console.log('Caught error:', e.message);
+    return res.status(500).json({ error: e.message, stack: e.stack });
   }
 }
