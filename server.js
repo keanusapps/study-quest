@@ -55,7 +55,7 @@ app.get('/api/debug', async (req, res) => {
 });
  
 app.post('/api/register', (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, grade } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
   if (username.length < 2) return res.status(400).json({ error: 'Username too short' });
   if (password.length < 4) return res.status(400).json({ error: 'Password too short (min 4 chars)' });
@@ -69,11 +69,12 @@ app.post('/api/register', (req, res) => {
     token,
     points: 0,
     history: [],
+    grade: grade || null,
     created: new Date().toISOString(),
     lastBonus: null
   };
   saveDB(db);
-  res.json({ success: true, username, token });
+  res.json({ success: true, username, token, grade: grade || null });
 });
  
 app.post('/api/login', (req, res) => {
@@ -85,11 +86,10 @@ app.post('/api/login', (req, res) => {
   if (!user) return res.status(401).json({ error: 'User not found' });
   if (user.password !== hashPassword(password)) return res.status(401).json({ error: 'Wrong password' });
  
-  // New token on each login
   const token = generateToken(username);
   user.token = token;
   saveDB(db);
-  res.json({ success: true, username, token, points: user.points, history: user.history, lastBonus: user.lastBonus });
+  res.json({ success: true, username, token, points: user.points, history: user.history, lastBonus: user.lastBonus, grade: user.grade || null });
 });
  
 app.post('/api/save', (req, res) => {
