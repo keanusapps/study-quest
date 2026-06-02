@@ -160,4 +160,4 @@ app.post('/api/gemini', async (req, res) => {
 });
  
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Study Quest API running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Study Quest API v2 running on port ${PORT}`));
