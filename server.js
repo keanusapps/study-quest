@@ -38,7 +38,7 @@ app.get('/api/debug', async (req, res) => {
   if (!apiKey) return res.json({ error: 'No API key' });
   try {
     const geminiRes = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=' + apiKey,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey,
       { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say hello in one word.' }] }] }) }
     );
@@ -145,7 +145,7 @@ app.post('/api/gemini', async (req, res) => {
  
   try {
     const geminiRes = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=' + apiKey,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey,
       { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: Math.min(maxTokens * 2, 8192), temperature: 0.7 } }) }
     );
@@ -160,4 +160,4 @@ app.post('/api/gemini', async (req, res) => {
 });
  
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Study Quest API v2 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Study Quest API running on port ${PORT}`));
