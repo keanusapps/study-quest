@@ -2043,7 +2043,7 @@ export default function App() {
               {["de","en","it","fr"].map(l=><button key={l} onClick={()=>setLangS(l)} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${lang===l?"#7C3AED":"rgba(255,255,255,0.1)"}`,background:lang===l?"rgba(124,58,237,0.25)":"transparent",color:lang===l?"#a78bfa":"#666",cursor:"pointer",fontSize:12,fontWeight:lang===l?"bold":"normal"}}>{l.toUpperCase()}</button>)}
             </div>
             <div style={{fontSize:56,marginBottom:8}}>🦁</div>
-            <h1 style={{background:"linear-gradient(135deg,#7C3AED,#38BDF8,#10B981)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:"0 0 6px",fontSize:32,fontWeight:900,textAlign:"center"}}>{t.loginTitle}</h1>
+            <h1 style={{background:"linear-gradient(135deg,#7C3AED,#38BDF8,#10B981)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:"0 0 12px",fontSize:32,fontWeight:900,textAlign:"center",lineHeight:1.3,paddingBottom:4}}>{t.loginTitle}</h1>
             <p style={{color:"#555",fontSize:14,margin:"0 0 28px",textAlign:"center"}}>{t.loginSubtitle}</p>
 
             {/* Existing users */}
@@ -2352,7 +2352,3 @@ export default function App() {
             <button onClick={()=>{if(!newName.trim())return;const ns={id:`c_${Date.now()}`,name:newName,icon:newIcon,color:newColor};const u=[...subjects,ns];setSubjects(u);localStorage.setItem("sq_subjects",JSON.stringify(u));toast_(`✅ "${newName}" hinzugefügt`,"#10B981");setNewName("");go("home");}} style={btnPrimary}>{t.addBtn}</button>
           </div>
         </>}
-
-      </div>    </div>
-  );
-}
