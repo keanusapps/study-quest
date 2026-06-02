@@ -1263,6 +1263,8 @@ function ChatHelper({subject,topic,lang,phase,onPhaseComplete,onMessagesChange,d
 
   const gradeNote=`The student is in grade ${grade} (age ${grade+5}-${grade+6}). Adapt difficulty accordingly: grade 1-4 = very simple, grade 5-7 = intermediate, grade 8-10 = advanced, grade 11-12 = near-university level.`;
 
+  const [showFinish,setShowFinish]=useState(false);
+
   const sys=`You are a friendly, encouraging study tutor for a grade ${grade} student (age ${grade+5}-${grade+6}). Subject: "${subject}", Topic: "${topic}". Always respond in ${ln}. Be concise, clear and supportive. ${levelNote} ${gradeNote}`;
 
   const updateMessages=(newMsgs)=>{ setMessages(newMsgs); onMessagesChange?.(newMsgs); };
@@ -1270,7 +1272,7 @@ function ChatHelper({subject,topic,lang,phase,onPhaseComplete,onMessagesChange,d
   const send=useCallback(async(text,b64=null,isAuto=false)=>{
     if(!text.trim()&&!b64)return;
     const newMsgs=isAuto?[...messages,{role:"assistant",content:text,isAuto:true}]:[...messages,{role:"user",content:text,image:b64}];
-    if(!isAuto) updateMessages(newMsgs);
+    if(!isAuto){updateMessages(newMsgs);setInput("");setImgB64(null);setImgFile(null);}
     setLoading(true);
     try{
       const msgToSend=isAuto?messages:[...messages,{role:"user",content:text,image:b64}];
@@ -1279,7 +1281,8 @@ function ChatHelper({subject,topic,lang,phase,onPhaseComplete,onMessagesChange,d
       const reply=await callClaude(hist,sys);
       const withReply=[...newMsgs,{role:"assistant",content:reply}];
       updateMessages(withReply);
-      if((phase==="mid"||phase==="end")&&b64)setTimeout(()=>onPhaseComplete?.(),1500);
+      // Show finish button after first AI response in mid/end phase
+      if(phase==="mid"||phase==="end") setShowFinish(true);
     }catch{updateMessages([...newMsgs,{role:"assistant",content:"⚠️ Fehler."}]);}
     setLoading(false);
   },[messages,sys,phase,onPhaseComplete]);
@@ -1313,8 +1316,14 @@ function ChatHelper({subject,topic,lang,phase,onPhaseComplete,onMessagesChange,d
   useEffect(()=>{
     if(phase==="mid"||phase==="end"){
       const init=phase==="mid"
-        ?`I'm halfway through studying "${topic}" (grade ${grade}). Please give me feedback and tips for the second half.`
-        :`I've finished studying "${topic}" (grade ${grade}). Here is my final progress.`;
+        ?lang==="de"?`Ich bin auf halbem Weg beim Lernen von "${topic}" (Klasse ${grade}). Bitte gib mir Feedback und Tipps für die zweite Hälfte.`
+          :lang==="it"?`Sono a metà dello studio di "${topic}" (classe ${grade}). Dammi feedback e consigli per la seconda metà.`
+          :lang==="fr"?`Je suis à mi-chemin dans l'étude de "${topic}" (classe ${grade}). Donne-moi des commentaires et des conseils pour la seconde moitié.`
+          :`I'm halfway through studying "${topic}" (grade ${grade}). Please give me feedback and tips for the second half.`
+        :lang==="de"?`Ich habe "${topic}" (Klasse ${grade}) fertig gelernt. Hier ist mein Fortschritt.`
+          :lang==="it"?`Ho finito di studiare "${topic}" (classe ${grade}). Ecco i miei progressi.`
+          :lang==="fr"?`J'ai terminé d'étudier "${topic}" (classe ${grade}). Voici mes progrès.`
+          :`I've finished studying "${topic}" (grade ${grade}). Here is my final progress.`;
       send(init);
     }
   },[]);
@@ -1336,6 +1345,13 @@ function ChatHelper({subject,topic,lang,phase,onPhaseComplete,onMessagesChange,d
       {loading&&<div style={{alignSelf:"flex-start",display:"flex",gap:5,paddingLeft:4}}>{[0,1,2].map(i=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:"#7C3AED",animation:`pulse 1.2s ${i*0.2}s infinite`}}/>)}</div>}
       <div ref={bottomRef}/>
     </div>
+    {(phase==="mid"||phase==="end")&&showFinish&&<div style={{padding:"10px 12px",borderTop:"1px solid rgba(255,255,255,0.07)"}}>
+      <button onClick={()=>onPhaseComplete?.()} style={{width:"100%",padding:"12px",borderRadius:12,background:"linear-gradient(135deg,#10B981,#059669)",color:"#fff",border:"none",fontWeight:"bold",cursor:"pointer",fontSize:14}}>
+        {phase==="mid"
+          ?(lang==="de"?"▶ Weiter lernen":lang==="en"?"▶ Continue Studying":lang==="it"?"▶ Continua":lang==="fr"?"▶ Continuer":"▶ Continue")
+          :(lang==="de"?"✅ Abschließen & Punkte holen":lang==="en"?"✅ Finish & Claim Points":lang==="it"?"✅ Termina e prendi i punti":lang==="fr"?"✅ Terminer et obtenir les points":"✅ Finish")}
+      </button>
+    </div>}
     {(phase==="mid"||phase==="end")&&<div style={{padding:"7px 12px",background:"rgba(255,215,0,0.06)",borderTop:"1px solid rgba(255,215,0,0.12)"}}>
       <div style={{fontSize:11,color:"#FFD700",marginBottom:4}}>{t.photoLabel}</div>
       <button onClick={()=>fileRef.current?.click()} style={{padding:"5px 12px",borderRadius:8,border:"1px solid rgba(255,215,0,0.3)",background:"rgba(255,215,0,0.1)",color:"#FFD700",cursor:"pointer",fontSize:12}}>{imgFile?`✅ ${imgFile.name}`:t.choosePhoto}</button>
