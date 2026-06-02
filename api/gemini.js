@@ -1,3 +1,7 @@
+export const config = {
+  api: { bodyParser: { sizeLimit: '10mb' } }
+};
+ 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -8,15 +12,7 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'No API key' });
  
   try {
-    // Parse body manually
-    let body = req.body;
-    if (!body || typeof body === 'undefined') {
-      const chunks = [];
-      for await (const chunk of req) chunks.push(chunk);
-      body = JSON.parse(Buffer.concat(chunks).toString());
-    }
- 
-    const { system, messages, maxTokens = 1000 } = body;
+    const { system, messages, maxTokens = 1000 } = req.body;
     const contents = [];
  
     if (system) {
