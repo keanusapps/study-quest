@@ -1,10 +1,8 @@
 {
-  "functions": {
-    "api/gemini.js": {
-      "runtime": "@vercel/node@3.0.7"
-    },
-    "api/test.js": {
-      "runtime": "@vercel/node@3.0.7"
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     }
-  }
+  ]
 }
