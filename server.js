@@ -4,7 +4,12 @@ import crypto from 'crypto';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
  
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ['https://keanusapps-study-quest.vercel.app', 'http://localhost:5173', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' }));
  
 // ── SIMPLE DATABASE (JSON file) ───────────────────────────────────────────────
