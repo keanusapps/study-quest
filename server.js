@@ -33,6 +33,23 @@ app.get('/', (req, res) => {
   res.json({ status: 'Study Quest API running ✅' });
 });
  
+app.get('/api/debug', async (req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return res.json({ error: 'No API key', env: Object.keys(process.env) });
+  
+  try {
+    const geminiRes = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Say hello.' }] }] }) }
+    );
+    const data = await geminiRes.json();
+    return res.json({ status: geminiRes.status, ok: geminiRes.ok, data });
+  } catch(e) {
+    return res.json({ error: e.message });
+  }
+});
+ 
 app.post('/api/register', (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
